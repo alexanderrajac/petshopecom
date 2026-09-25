@@ -71,13 +71,23 @@ if (process.env.NODE_ENV === "production") {
 app.use(notFound);
 app.use(errorHandler);
 
-const server = app.listen(port, () => console.log(`Server is running on port ${port}`));
+let server;
+if (!process.env.VERCEL) {
+  server = app.listen(port, () =>
+    console.log(`Server is running on port ${port}`)
+  );
 
-// Graceful shutdown handling
-process.on("SIGTERM", () => {
-  console.log("SIGTERM received, closing HTTP server gracefully");
-  server.close(() => {
-    console.log("HTTP server closed");
+  // Graceful shutdown handling
+  process.on("SIGTERM", () => {
+    console.log("SIGTERM received, closing HTTP server gracefully");
+    if (server) {
+      server.close(() => {
+        console.log("HTTP server closed");
+      });
+    }
   });
-});
+}
+
+export default app;
+
 

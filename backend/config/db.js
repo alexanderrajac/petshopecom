@@ -30,7 +30,13 @@ process.once("SIGUSR2", async () => {
   process.kill(process.pid, "SIGUSR2");
 });
 
+let cachedConnection = global.mongooseConnection;
+
 const connectDB = async () => {
+  if (cachedConnection && mongoose.connection.readyState >= 1) {
+    return cachedConnection;
+  }
+
   const mongoUri = process.env.MONGO_URI;
 
   // Try external or configured URI first if specified and not default local port
@@ -44,13 +50,29 @@ const connectDB = async () => {
         serverSelectionTimeoutMS: 5000,
       });
       console.log(`MongoDB Connected: ${conn.connection.host}`);
+      cachedConnection = conn;
+      global.mongooseConnection = conn;
       await seedInitialData();
-      return;
+      return conn;
     } catch (error) {
       console.warn(
         `Could not connect to external MONGO_URI (${error.message}). Falling back to local embedded MongoDB...`
       );
+      if (process.env.VERCEL) {
+        throw error;
+      }
     }
+  }
+
+  if (process.env.VERCEL) {
+    if (mongoUri) {
+      const conn = await mongoose.connect(mongoUri);
+      cachedConnection = conn;
+      global.mongooseConnection = conn;
+      return conn;
+    }
+    console.warn("No MONGO_URI provided in Vercel environment.");
+    return;
   }
 
   // Try standard local MongoDB port 27017
@@ -62,8 +84,10 @@ const connectDB = async () => {
       }
     );
     console.log(`MongoDB Connected: ${conn.connection.host}`);
+    cachedConnection = conn;
+    global.mongooseConnection = conn;
     await seedInitialData();
-    return;
+    return conn;
   } catch (err) {
     // Port 27017 not listening; start embedded persistent local instance
     try {
